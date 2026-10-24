@@ -1,0 +1,36 @@
+services:
+  airscout:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WAHA_URL: http://whatsapp-gateway:3000
+      GOOGLE_FLIGHTS_CDP_URL: http://google-browser:9222
+    ports:
+      - "127.0.0.1:18081:8080"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      whatsapp-gateway:
+        condition: service_started
+      google-browser:
+        condition: service_started
+  google-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile.google-browser
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6080:6080"
+    volumes:
+      - ./data:/data
+  whatsapp-gateway:
+    image: ${WAHA_IMAGE:-devlikeapro/waha:noweb-arm}
+    restart: unless-stopped
+    environment:
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_GATEWAY_ENGINE:-GOWS}
+    ports:
+      - "127.0.0.1:${WHATSAPP_GATEWAY_PORT:-3010}:3000"
+    volumes:
+      - ./data/whatsapp-sessions:/app/.sessions

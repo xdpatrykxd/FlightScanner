@@ -1,0 +1,12 @@
+.env
+.DS_Store
+__pycache__/
+*.py[cod]
+data/*.sqlite3
+data/*.sqlite3-*
+data/*.sqlite3-shm
+data/*.sqlite3-wal
+data/whatsapp-sessions/
+data/google-flights-profile/
+data/whatsapp-qr.png
+data/*.lock
