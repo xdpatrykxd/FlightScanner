@@ -9,6 +9,9 @@ _progress={'running':False,'completed':0,'total':0,'message':'Ready for a price 
 
 def scan_interval_minutes():return max(1,int(os.getenv('CHECK_INTERVAL_MINUTES') or os.getenv('SCAN_INTERVAL_MINUTES','1440')))
 def request_timeout_seconds():return max(1,float(os.getenv('REQUEST_TIMEOUT_SECONDS','25')))
+def is_major_drop(price,average,sample_count,minimum_percent,currency='EUR'):
+    threshold=max(1.0,min(90.0,float(minimum_percent or 10)))
+    return bool(currency=='EUR' and average and sample_count>=3 and price<=average*(1-threshold/100))
 def scan_status():return dict(_progress)
 
 def validate_config(c,require_group=False):
@@ -56,6 +59,7 @@ async def search_offers(c,mode='trip'):
                 read_fares=True
                 if int(c.get('max_connections',2)) < offer['itinerary'][0]['stops']:continue
                 offer['source_url']=url
+                offer['passengers']=max(1,int(c.get('passengers',1) or 1))
                 if mode=='explore':offer['destination_city']=group['destination_city']
                 offers.append(offer)
         except Exception as e:errors.append(e)
@@ -121,16 +125,16 @@ async def _trip_scan(c):
         return {'scan_id':sid,'offers':[],'best_price':None,'sent':False,'alert_type':'trip','searched_departure_date':None,'searched_return_date':c['return_date']}
     best=offers[0];target=float(c.get('target_price',0));sent=False
     destinations,_=whatsapp.alert_destinations(c.get('group_id'))
-    criteria={key:actual.get(key) for key in ('origin_airports','destination_airports','origin','destination','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','passengers','cabin','max_connections')}
+    criteria={key:actual.get(key) for key in ('origin_airports','destination_airports','origin','destination','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','passengers','cabin','max_connections','min_price_drop_percent')}
     criteria['type']='trip'
     trip_key=hashlib.sha256(json.dumps(criteria,sort_keys=True).encode()).hexdigest()
     samples=store.recent_route_prices(best['itinerary'][0]['from'],best['itinerary'][0]['to'],actual['departure_date'],actual['return_date'])
     average=sum(samples)/len(samples) if samples else None
-    major_drop=bool(len(samples)>=3 and average and best['currency']=='EUR' and best['price']<=average*0.9)
+    major_drop=is_major_drop(best['price'],average,len(samples),c.get('min_price_drop_percent',10),best['currency'])
     sid=store.log_scan(best['price'],best['currency'],offers)
     if best['currency']=='EUR' and ((target>0 and best['price']<=target) or major_drop):
         latest=store.get_config()
-        watched=('origin_airports','destination_airports','origin','destination','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','target_price','group_id','cabin','passengers','max_connections')
+        watched=('origin_airports','destination_airports','origin','destination','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','target_price','group_id','cabin','passengers','max_connections','min_price_drop_percent')
         if any(latest.get(k)!=c.get(k) for k in watched):return {'scan_id':sid,'offers':offers,'best_price':best['price'],'sent':False,'stale':True,'alert_type':'trip'}
         stop_summary=' / '.join('nonstop' if leg['stops']==0 else f"{leg['stops']} stop" if leg['stops']==1 else f"{leg['stops']} stops" for leg in best['itinerary'])
         drop_line=f"Major drop: {((average-best['price'])/average*100):.0f}% below recent average (EUR {average:.0f}).\n" if major_drop else ''
@@ -152,15 +156,15 @@ async def _explore_scan(config):
         sid=store.log_scan(offers=[]);return {'scan_id':sid,'offers':[],'best_price':None,'sent':False,'alert_type':'explore','searched_departure_date':None,'searched_return_date':c['return_date']}
     best=offers[0];budget=float(c['target_price']);sent=False
     destinations,_=whatsapp.alert_destinations(config.get('group_id'))
-    watched=('origin_airports','destination_airports','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','budget','group_id','passengers','cabin','max_connections')
+    watched=('origin_airports','destination_airports','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','budget','group_id','passengers','cabin','max_connections','min_price_drop_percent')
     trip_key=hashlib.sha256(json.dumps({'type':'explore',**{k:actual.get(k) if k in ('departure_date','return_date') else config.get(k) for k in watched}},sort_keys=True).encode()).hexdigest()
     samples=store.recent_route_prices(best['itinerary'][0]['from'],best['itinerary'][0]['to'],actual['departure_date'],actual['return_date'])
     average=sum(samples)/len(samples) if samples else None
-    major_drop=bool(len(samples)>=3 and average and best['currency']=='EUR' and best['price']<=average*0.9)
+    major_drop=is_major_drop(best['price'],average,len(samples),config.get('min_price_drop_percent',10),best['currency'])
     sid=store.log_scan(best['price'],best['currency'],offers)
     if best['currency']=='EUR' and (best['price']<=budget or major_drop):
         latest=store.get_config().get('destination_alert',{})
-        watched=('origin_airports','destination_airports','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','budget','group_id','passengers','cabin','max_connections')
+        watched=('origin_airports','destination_airports','departure_date','return_date','departure_start_date','departure_end_date','return_start_date','return_end_date','budget','group_id','passengers','cabin','max_connections','min_price_drop_percent')
         if any(latest.get(k)!=config.get(k) for k in watched):return {'scan_id':sid,'offers':offers,'best_price':best['price'],'sent':False,'stale':True,'alert_type':'explore'}
         city=best.get('destination_city') or best['itinerary'][0]['to']
         drop_line=f"Major drop: {((average-best['price'])/average*100):.0f}% below recent average (EUR {average:.0f}).\n" if major_drop else ''

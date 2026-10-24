@@ -41,6 +41,7 @@ class DestinationAlert(BaseModel):
     return_start_date:str=''
     return_end_date:str=''
     budget:float=Field(gt=0)
+    min_price_drop_percent:int=Field(default=10,ge=1,le=90)
     passengers:int=Field(default=2,ge=1,le=9)
     cabin:str='economy'
     max_connections:int=Field(default=2,ge=0,le=4)
@@ -64,6 +65,7 @@ class Trip(BaseModel):
     return_start_date:str=''
     return_end_date:str=''
     target_price:float=Field(gt=0)
+    min_price_drop_percent:int=Field(default=10,ge=1,le=90)
     group_id:str=''
     group_name:str=''
     passengers:int=Field(default=2,ge=1,le=9)

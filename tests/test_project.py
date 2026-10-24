@@ -119,6 +119,25 @@ class SearchProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(scanner.scan_status()["total"], 1)
 
 
+class PriceDropTests(unittest.TestCase):
+    def test_custom_minimum_drop_requires_three_samples(self):
+        self.assertFalse(scanner.is_major_drop(899, 1000, 2, 10))
+        self.assertFalse(scanner.is_major_drop(950, 1000, 3, 10))
+        self.assertTrue(scanner.is_major_drop(900, 1000, 3, 10))
+        self.assertTrue(scanner.is_major_drop(800, 1000, 3, 20))
+
+    def test_non_euro_prices_do_not_trigger_drop_alert(self):
+        self.assertFalse(scanner.is_major_drop(800, 1000, 5, 10, currency='USD'))
+
+    def test_alert_models_accept_custom_minimum_drop(self):
+        trip = web.Trip(origin='BRU', destination='HND', departure_date='2027-07-11', return_date='2027-07-28', target_price=2000, min_price_drop_percent=15)
+        self.assertEqual(trip.min_price_drop_percent, 15)
+        explore = web.DestinationAlert(origin_airports=['BRU'], destination_airports=['HND'], departure_date='2027-07-11', return_date='2027-07-28', budget=2000, min_price_drop_percent=25)
+        self.assertEqual(explore.min_price_drop_percent, 25)
+        with self.assertRaises(Exception):
+            web.Trip(origin='BRU', destination='HND', departure_date='2027-07-11', return_date='2027-07-28', target_price=2000, min_price_drop_percent=95)
+
+
 class DateNormalizationTests(unittest.TestCase):
     def test_alert_types_use_distinct_trip_keys(self):
         trip = {"origin": "BRU", "destination": "HND", "departure_date": "2027-07-11", "return_date": "2027-07-28", "passengers": 2}
