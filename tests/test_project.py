@@ -98,6 +98,27 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(store.last_alert_price("chat@g.us", "trip"), 950)
 
 
+class SearchProgressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_date_range_reports_current_date_and_completed_step(self):
+        captured = []
+        async def fake_search(config, mode='trip'):
+            captured.append(scanner.scan_status())
+            return []
+        config = {
+            "departure_date": "2027-07-11", "return_date": "2027-07-28",
+            "departure_start_date": "2027-07-11", "departure_end_date": "2027-07-11",
+            "return_start_date": "2027-07-28", "return_end_date": "2027-07-28",
+        }
+        with patch.object(scanner, "search_offers", fake_search):
+            offers, actual = await scanner.search_date_range(config)
+        self.assertEqual(offers, [])
+        self.assertEqual(actual, config)
+        self.assertEqual(captured[0]["stage"], "Checking trip alert")
+        self.assertEqual(captured[0]["message"], "Date option 1 of 1")
+        self.assertEqual(scanner.scan_status()["completed"], 1)
+        self.assertEqual(scanner.scan_status()["total"], 1)
+
+
 class DateNormalizationTests(unittest.TestCase):
     def test_alert_types_use_distinct_trip_keys(self):
         trip = {"origin": "BRU", "destination": "HND", "departure_date": "2027-07-11", "return_date": "2027-07-28", "passengers": 2}

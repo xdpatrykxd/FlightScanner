@@ -5,7 +5,7 @@ import portalocker
 
 _scan_lock=asyncio.Lock()
 _request_slots=asyncio.Semaphore(max(1,int(os.getenv('REQUEST_CONCURRENCY','4'))))
-_progress={'running':False,'completed':0,'total':0,'message':'Ready for a price check.','offers':[],'error':None}
+_progress={'running':False,'completed':0,'total':0,'message':'Ready for a price check.','detail':'','stage':'idle','route_completed':0,'route_total':0,'offers':[],'error':None}
 
 def scan_interval_minutes():return max(1,int(os.getenv('CHECK_INTERVAL_MINUTES') or os.getenv('SCAN_INTERVAL_MINUTES','1440')))
 def request_timeout_seconds():return max(1,float(os.getenv('REQUEST_TIMEOUT_SECONDS','25')))
@@ -44,9 +44,10 @@ async def search_offers(c,mode='trip'):
         route_groups[key]={'origin_city':origin_city,'destination_city':destination_city,'origins':[origin.upper()],'destinations':[destination.upper()]}
     total=len(route_groups)
     offers=[];errors=[];pages=[];completed=0;read_fares=False
+    _progress.update(route_completed=0,route_total=total)
     for group in route_groups.values():
         origin=group['origins'][0];destination=group['destinations'][0]
-        _progress.update(running=True,completed=completed,total=total,message=f'Searching {group["origin_city"]} → {group["destination_city"]} ({completed+1} of {total})')
+        _progress.update(running=True,stage='Searching airport pair',route_completed=completed,route_total=total,detail=f'{group["origin_city"]} ({origin}) → {group["destination_city"]} ({destination}) · pair {completed+1} of {total}')
         route={**c,'origin':origin,'destination':destination,'origin_city':group['origin_city'],'destination_city':group['destination_city'],'origin_airports':group['origins'],'destination_airports':group['destinations']}
         try:
             async with _request_slots:found,body,url=await google_flights.search(route,request_timeout_seconds())
@@ -60,7 +61,7 @@ async def search_offers(c,mode='trip'):
         except Exception as e:errors.append(e)
         completed+=1
         offers.sort(key=lambda offer:offer['price'])
-        _progress.update(completed=completed,total=total,offers=offers[:20],message=f'Checked {group["origin_city"]} → {group["destination_city"]} · {completed} of {total} city pairs')
+        _progress.update(route_completed=completed,route_total=total,offers=offers[:20],detail=f'Checked {group["origin_city"]} ({origin}) → {group["destination_city"]} ({destination}) · {completed} of {total} airport pairs')
     if not offers and errors:raise RuntimeError(f'Google Flights search failed for every airport combination: {errors[0]}')
     if not offers:
         no_flights=('no flights','no results','didn’t find any flights','did not find any flights',"couldn't find flights","could not find flights")
@@ -81,9 +82,10 @@ async def search_date_range(c,mode='trip'):
             candidates.append((out,back))
     candidates.sort(key=lambda pair:(pair[0],pair[1]))
     combined=[]
+    alert_label='destination alert' if mode=='explore' else 'trip alert'
     for index,(out,back) in enumerate(candidates,1):
         candidate={**c,'departure_date':out.isoformat(),'return_date':back.isoformat()}
-        _progress.update(running=True,message=f'Comparing date option {index} of {len(candidates)} · {out.strftime("%d %b")} to {back.strftime("%d %b")}')
+        _progress.update(running=True,stage=f'Checking {alert_label}',completed=index-1,total=len(candidates),route_completed=0,route_total=0,message=f'Date option {index} of {len(candidates)}',detail=f'{out.strftime("%d %b %Y")} → {back.strftime("%d %b %Y")} · preparing airport searches')
         offers=await search_offers(candidate,mode)
         for offer in offers:
             offer['searched_departure_date']=candidate['departure_date']
@@ -92,7 +94,7 @@ async def search_date_range(c,mode='trip'):
             offer['return_date_offset']=(back-returning).days
         combined.extend(offers)
         combined.sort(key=lambda offer:offer['price'])
-        _progress.update(running=True,message=f'Compared {index} of {len(candidates)} date options · best so far €{combined[0]["price"]:,.0f}' if combined else f'Compared {index} of {len(candidates)} date options')
+        _progress.update(running=True,completed=index,total=len(candidates),message=f'Date option {index} of {len(candidates)} complete',detail=(f'Best so far €{combined[0]["price"]:,.0f}' if combined else 'No readable fares for this date option'))
     if not combined:return [],c
     combined.sort(key=lambda offer:offer['price'])
     anchor_date_offers=[offer for offer in combined if offer.get('departure_date_offset')==0 and offer.get('return_date_offset')==(return_end-returning).days]
@@ -195,7 +197,7 @@ async def _run_scans():
     return {'results':results,'offers':offers[:20],'best_price':offers[0]['price'] if offers else None,'sent':any(r.get('sent') for r in results),'errors':errors}
 
 async def scan_all_once():
-    _progress.update(running=True,completed=0,total=0,message='Starting price checks…',offers=[],error=None,result=None)
+    _progress.update(running=True,completed=0,total=0,route_completed=0,route_total=0,stage='Starting',detail='Loading saved alerts',message='Starting price checks…',offers=[],error=None,result=None)
     async with _scan_lock:
         path=store.DB_PATH+'.lock'
         try:
@@ -204,7 +206,7 @@ async def scan_all_once():
         finally:_progress.update(running=False)
 
 async def scan_once():
-    _progress.update(running=True,completed=0,total=0,message='Checking the saved flight alert…',offers=[],error=None,result=None)
+    _progress.update(running=True,completed=0,total=0,route_completed=0,route_total=0,stage='Starting',detail='Loading saved alert',message='Checking the saved flight alert…',offers=[],error=None,result=None)
     async with _scan_lock:
         path=store.DB_PATH+'.lock'
         try:
