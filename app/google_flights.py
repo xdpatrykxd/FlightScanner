@@ -310,10 +310,14 @@ def _extract_offers(cards, config):
                 segments=[{"from":a,"to":b,"airline_code":air,"flight_number":number,"date":day[:4]+'-'+day[4:6]+'-'+day[6:]}
                           for a,b,air,number,day in re.findall(r'([A-Z]{3})-([A-Z]{3})-([A-Z0-9]{2,3})-(\d+)-(\d{8})',itinerary.group(1))]
                 if segments: break
-        def label_value(prefix):
-            return next((re.sub(r'\.$','',label.split(':',1)[-1].strip()) for label in data.get('time_labels',[]) if label.startswith(prefix)),None)
+        def label_values(prefix):
+            return [re.sub(r'\.$','',label.split(':',1)[-1].strip()) for label in data.get('time_labels',[]) if label.startswith(prefix)]
+        departure_times=label_values('Departure time')
+        arrival_times=label_values('Arrival time')
         leg={"from": actual_origin, "to": actual_destination, "stops": stops, "segments":segments,
-             "departure_time":label_value('Departure time'),"arrival_time":label_value('Arrival time'),
+             "departure_time":departure_times[0] if departure_times else None,
+             "arrival_time":arrival_times[0] if arrival_times else None,
+             "departure_times":departure_times,"arrival_times":arrival_times,
              "duration":data.get('duration'),"layovers":data.get('layovers',[])}
         emissions=data.get('emissions')
         offers.append({
@@ -418,7 +422,7 @@ async def search(config, timeout_seconds=25):
 
             lowered = body.lower()
             if "oops, something went wrong" in lowered:
-                raise RuntimeError("Google Flights returned an error for this route. If it asks you to sign in, open Settings → Google Flights sign-in, then retry.")
+                raise RuntimeError("Google Flights returned an error for this route. If it asks you to sign in, open AirScout’s /admin page, then retry.")
             if any(message in lowered for message in (
                 "no results returned", "no flights found", "didn't find any flights",
                 "didn’t find any flights", "couldn't find flights", "could not find flights",
@@ -436,7 +440,7 @@ async def search(config, timeout_seconds=25):
             offers = _extract_offers(cards, config)
             if not offers:
                 if not any(marker in lowered for marker in result_markers):
-                    raise RuntimeError("Google Flights did not load search results. Open Settings → Google Flights sign-in, sign in if prompted, and retry.")
+                    raise RuntimeError("Google Flights did not load search results. Open AirScout’s /admin page, sign in if prompted, and retry.")
                 raise RuntimeError("Google Flights loaded the selected route but showed no readable fare cards. Try again later or check the AirScout logs.")
             return offers, body, page.url
         finally:

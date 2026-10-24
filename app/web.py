@@ -96,6 +96,9 @@ def _normalize_window_dates(data):
 @app.get('/')
 async def index():return FileResponse('static/index.html')
 
+@app.get('/admin')
+async def admin():return FileResponse('static/admin.html')
+
 @app.get('/README.md')
 async def readme():return FileResponse('README.md',media_type='text/markdown')
 

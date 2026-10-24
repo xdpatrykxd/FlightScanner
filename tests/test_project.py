@@ -56,7 +56,7 @@ class FareExtractionTests(unittest.TestCase):
 
     def test_extracts_matching_fare_and_ignores_wrong_destination(self):
         cards = [
-            {"text": "BRU HND Air China 1 stop 18 hr € 2.076", "airline": "Air China"},
+            {"text": "BRU HND Air China 1 stop 18 hr € 2.076", "airline": "Air China", "time_labels": ["Departure time: 08:30 AM", "Arrival time: 05:10 PM", "Departure time: 09:45 PM", "Arrival time: 06:20 AM"]},
             {"text": "BRU NRT Air France 1 stop 18 hr € 1.800", "airline": "Air France"},
             {"text": "BRU HND € 2.000", "airline": "Unknown"},
         ]
@@ -64,6 +64,8 @@ class FareExtractionTests(unittest.TestCase):
         self.assertEqual(len(offers), 1)
         self.assertEqual(offers[0]["price"], 2076)
         self.assertEqual(offers[0]["itinerary"][0]["stops"], 1)
+        self.assertEqual(offers[0]["itinerary"][0]["departure_times"], ["08:30 AM", "09:45 PM"])
+        self.assertEqual(offers[0]["itinerary"][0]["arrival_times"], ["05:10 PM", "06:20 AM"])
 
 
 class StorageTests(unittest.TestCase):
@@ -136,6 +138,15 @@ class PriceDropTests(unittest.TestCase):
         self.assertEqual(explore.min_price_drop_percent, 25)
         with self.assertRaises(Exception):
             web.Trip(origin='BRU', destination='HND', departure_date='2027-07-11', return_date='2027-07-28', target_price=2000, min_price_drop_percent=95)
+
+
+class AdminRouteTests(unittest.TestCase):
+    def test_admin_route_is_available_but_not_linked_from_main_app(self):
+        self.assertIn('/admin', {route.path for route in web.app.routes})
+        with open('static/index.html', encoding='utf-8') as source:
+            html = source.read()
+        self.assertNotIn('href="/admin"', html)
+        self.assertNotIn('Google Flights sign-in', html)
 
 
 class DateNormalizationTests(unittest.TestCase):

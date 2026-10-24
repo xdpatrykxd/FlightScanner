@@ -69,7 +69,7 @@ Keep this SSH tunnel running in a terminal on your computer; replace the same tw
 ssh -N -L 18081:127.0.0.1:18081 -L 6080:127.0.0.1:6080 SERVER_USER@SERVER_IP
 ```
 
-Open **http://localhost:18081** in your browser. In **Settings**, connect WhatsApp and scan the QR code with the sender phone using **WhatsApp → Settings → Linked devices → Link a device**. The sender phone must already belong to the group you want to alert. Then choose **Load my groups**, select the group, and send a test message. In Settings, you can also open the Google Flights sign-in window; it is available on your computer at **http://localhost:6080** while the SSH tunnel is running.
+Open **http://localhost:18081** in your browser. In **Settings**, connect WhatsApp and scan the QR code with the sender phone using **WhatsApp → Settings → Linked devices → Link a device**. The sender phone must already belong to the group you want to alert. Then choose **Load my groups**, select the group, and send a test message. For the advanced Google Flights sign-in browser, open **http://localhost:18081/admin**; it is available at **http://localhost:6080** while the SSH tunnel is running.
 
 Go to **My alerts** to create a specific-trip alert or a multi-destination budget alert. Choose the group for the alert and save. Set an earliest and latest departure, then an earliest and latest return. AirScout checks every valid departure and return combination inside those ranges and never searches outside them. Results show the exact dates and the savings against the range endpoints when available. Wider ranges add Google Flights searches for every valid date pair. AirScout runs an initial check after you save. Use **Check prices now** on Overview for an additional live check. The default automatic interval is three hours; set `CHECK_INTERVAL_MINUTES` in `.env` if you want a different schedule.
 
@@ -125,7 +125,7 @@ If AirScout finds no fare for the selected departure day, it retries the followi
 
 **WhatsApp does not send:** send a test message in Settings. Check the WAHA logs and group permissions. WAHA acceptance confirms that the gateway accepted the request; it does not confirm the group received or read the message.
 
-**Google Flights sign-in window does not open:** keep the SSH tunnel running with both port mappings. Open `http://localhost:6080` on your computer. The profile is stored in `data/google-flights-profile/` on the server and should be treated as private.
+**Google Flights sign-in window does not open:** keep the SSH tunnel running with both port mappings. Open AirScout’s `/admin` page (or `http://localhost:6080` directly) on your computer. The profile is stored in `data/google-flights-profile/` on the server and should be treated as private.
 
 **Google Flights search fails:** inspect `docker compose logs --tail=100 airscout` and retry later. Google may block automated searches or change its result page. Confirm any fare directly on Google Flights.
 
